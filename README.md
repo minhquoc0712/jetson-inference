@@ -1,5 +1,5 @@
 benchmark folder was copied from: https://github.com/LukasHedegaard/pytorch-benchmark. Some modifications was added.
-Code for running inference on onnx and tensorrt was copied from Dat Thanh Tran scripts with some modifications.
+Code for running inference on onnx and tensorrt were copied from Dat Thanh Tran scripts with some modifications.
 
 ## Benchmark Workflow:
 
