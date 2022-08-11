@@ -1,0 +1,12 @@
+_target_: benchmark_class.x3d.X3DBenchmark
+
+defaults:
+  - model: ???
+  - _self_
+
+download: True
+load: True
+enable_optimization: False
+precision: 'FP32'
+strict_precision: False
+num_classes: 400

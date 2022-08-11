@@ -1,0 +1,12 @@
+_target_: benchmark_class.pstbln.ProgressiveSpatioTemporalBLNBenchmark
+
+defaults:
+  - model: ???
+  - _self_
+
+provider: 'CUDAExecutionProvider'
+
+download: False
+load: False
+precision: 'FP32'
+strict_precision: False

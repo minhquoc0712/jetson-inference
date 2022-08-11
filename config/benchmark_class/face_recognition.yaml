@@ -1,0 +1,13 @@
+_target_: benchmark_class.frc.FRCBenchmark
+
+defaults:
+  - model: ???
+  - _self_
+
+provider: 'CUDAExecutionProvider'
+
+download: True
+load: True
+enable_optimization: False
+precision: 'FP32'
+strict_precision: False

@@ -1,0 +1,12 @@
+_target_: benchmark_class.cox3d.CoX3DBenchmark
+
+defaults:
+  - model: ???
+  - _self_
+
+download: True
+load: True
+enable_optimization: False
+precision: 'FP32'
+strict_precision: False
+num_classes: 400

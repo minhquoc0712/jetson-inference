@@ -1,0 +1,5 @@
+_target_: opendr.perception.activity_recognition.X3DLearner
+device: 'cuda'
+backbone: ???
+example_input_shape: [1, 3, 4, 160, 160]
+num_class: 400

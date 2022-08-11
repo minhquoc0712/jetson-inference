@@ -1,0 +1,6 @@
+_target_: learner_wrapper.face_recognition.FaceRecognitionWrapper
+backbone: ???
+mode: backbone_only
+device: cuda
+example_input_shape: [1, 3, 112, 112]
+num_class: 512

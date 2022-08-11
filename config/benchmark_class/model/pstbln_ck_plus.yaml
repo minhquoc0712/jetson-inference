@@ -1,0 +1,7 @@
+_target_: learner_wrapper.progressive_spatio_temporal_bln.ProgressiveSpatioTemporalBLNWrapper
+device: cuda
+num_point: 303
+num_class: 7
+num_frames: 5
+example_input_shape: [1, 2, 5, 303, 1]
+dataset_name: ck+

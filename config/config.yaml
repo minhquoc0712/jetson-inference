@@ -1,0 +1,21 @@
+defaults:
+  - benchmark_class: ???
+  - _self_
+
+batch_size: 1
+warmup_iter: 10
+benchmark_iter: 100
+
+mode: ???
+provider: 'CUDAExecutionProvider'
+
+pytorch_model_dir: '/media/ubuntu/sdcard/opendr_eu/jetson-inference/torch_models'
+
+hydra:
+  run:
+    dir: ./outputs/${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${mode}
+  sweep:
+    dir: ./outputs
+    subdir: ${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${mode}
+  job:
+    chdir: True
