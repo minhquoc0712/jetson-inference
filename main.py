@@ -3,7 +3,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
 
-
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def my_app(cfg : DictConfig) -> None:
     model_name = OmegaConf.to_container(HydraConfig.get().runtime.choices)['benchmark_class']

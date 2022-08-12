@@ -1,0 +1,12 @@
+_target_: benchmark_class.lwop.LightweightOpenPoseBenchmark
+
+defaults:
+  - model: ???
+  - _self_
+
+provider: 'CUDAExecutionProvider'
+
+download: True
+load: True
+precision: 'FP32'
+strict_precision: False

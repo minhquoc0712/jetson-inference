@@ -31,6 +31,13 @@ def get_device(model):
     return next(model.parameters()).device
 
 
+def generate_input_sample(input_shape: Union[list, tuple], mode) -> Union[torch.Tensor, np.array]:
+    if mode == 'torch':
+        return torch.randn(*input_shape, dtype=torch.float32).to('cpu')
+    else:
+        return np.random.rand(*input_shape).astype('float32')
+
+
 def measure_params(model):
     num_params = _INVALID
 
@@ -73,11 +80,12 @@ def warm_up(
     input_shape: Union[list, tuple],
     model_device,
     transfer_to_device_fn=torch.Tensor.to,
+    generate_input_sample_fn=generate_input_sample,
     num_runs: int = 100,
     mode: str = torch
 ):
     for _ in tqdm(range(num_runs), desc=f"Warming up with batch_size={input_shape[0]}"):    
-        sample = generate_input_sample(input_shape, mode=mode)
+        sample = generate_input_sample_fn(input_shape, mode=mode)
 
         if mode == 'torch':
             transfer_to_device_fn(
@@ -116,6 +124,7 @@ def measure_repeated_inference_timing(
     input_shape: Union[list, tuple],
     model_device: Union[None, torch.device],
     transfer_to_device_fn=torch.Tensor.to,
+    generate_input_sample_fn=generate_input_sample,
     num_runs: int = 100,
     mode: str = 'torch'
 ):
@@ -131,7 +140,7 @@ def measure_repeated_inference_timing(
         range(num_runs), desc=f"Measuring inference for batch_size={input_shape[0]}"
     ):
 
-        sample = generate_input_sample(input_shape, mode=mode)
+        sample = generate_input_sample_fn(input_shape, mode=mode)
 
         if mode == 'torch':
             start_on_cpu = time()
@@ -199,6 +208,7 @@ def measure_energy(
     input_shape: Union[list, tuple],
     model_device,
     transfer_to_device_fn=torch.Tensor.to,
+    generate_input_sample_fn=generate_input_sample,
     num_runs=100,
     include_transfer_costs=True,
     print_fn=logger.info,
@@ -244,7 +254,7 @@ def measure_energy(
         for _ in tqdm(
             range(num_runs), desc=f"Measuring energy for batch_size={input_shape[0]}"
         ):
-            sample = generate_input_sample(input_shape, mode=mode)
+            sample = generate_input_sample_fn(input_shape, mode=mode)
             meas.append(p_est.estimate_fn_power(test_fn)[0] / 1000)
         
         inference_joules = float(np.array(meas).mean())
@@ -271,13 +281,6 @@ def save_benchmark_results(d: dict) -> None:
         yaml.dump(d, f)
 
 
-def generate_input_sample(input_shape: Union[list, tuple], mode) -> Union[torch.Tensor, np.array]:
-    if mode == 'torch':
-        return torch.randn(*input_shape, dtype=torch.float32).to('cpu')
-    else:
-        return np.random.rand(*input_shape).astype('float32')
-
-
 def benchmark(
     model: torch.nn.Module,
     input_shape: Union[list, tuple],
@@ -286,6 +289,7 @@ def benchmark(
     mode: str = 'torch',
     get_device_fn: Callable[[Any], torch.device] = get_device,
     transfer_to_device_fn=torch.Tensor.to,
+    generate_input_sample_fn=generate_input_sample,
     print_fn=logger.info,
     warm_up_fn=warm_up,
     get_machine_info: str = False
@@ -345,6 +349,7 @@ def benchmark(
             input_shape,
             model_device,
             transfer_to_device_fn,
+            generate_input_sample_fn,
             num_runs=warm_up_iter,
             mode=mode
         )
@@ -354,6 +359,7 @@ def benchmark(
             input_shape,
             model_device,
             transfer_to_device_fn,
+            generate_input_sample_fn,
             num_runs,
             mode=mode
         )
@@ -364,6 +370,7 @@ def benchmark(
             input_shape,
             model_device,
             transfer_to_device_fn,
+            generate_input_sample_fn,
             num_runs=num_runs,
             include_transfer_costs=True,
             print_fn=print_fn,

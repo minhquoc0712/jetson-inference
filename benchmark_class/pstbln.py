@@ -1,5 +1,3 @@
-from torch import embedding
-from utils.tensorrt import get_engine
 from utils.onnx import pytorch_to_onnx
 
 import pycuda.autoinit
@@ -50,6 +48,9 @@ class ProgressiveSpatioTemporalBLNBenchmark(baseClassBenchmark):
             strict_precision=strict_precision,
             num_class=num_class
         )
+
+        self.onnx_file_path = os.getcwd() + f'/{self.learner.dataset_name}.onnx'
+
 
     def optimize(
         self,

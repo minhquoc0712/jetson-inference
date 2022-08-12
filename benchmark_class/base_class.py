@@ -24,9 +24,9 @@ class baseClassBenchmark():
         self,
         model: Learner,
         name: str,
-        pytorch_model_dir: str,
         example_input_shape: Union[list, tuple],
         mode: str,
+        pytorch_model_dir: str,
         provider: str,
         batch_size: int = 1,
         warmup_iter: int = 10,
@@ -41,10 +41,10 @@ class baseClassBenchmark():
         self.name = name
         self.learner = model
         self.model_device = self.learner.device
-        self.pytorch_model_dir = pytorch_model_dir
         self.batch_size = batch_size
         self.warmup_iter = warmup_iter
         self.benchmark_iter = benchmark_iter
+        self.pytorch_model_dir = pytorch_model_dir
         self.provider = provider
         self.enable_optimization = enable_optimization
 
@@ -75,9 +75,6 @@ class baseClassBenchmark():
         logger.info(
             f"Shape of benchmark sample: {self.benchmark_input_shape}."
         )
-
-        self.onnx_file_path = os.getcwd() + f'/{self.learner.dataset_name}.onnx'
-
      
     def download_weights(self):
         return
@@ -109,18 +106,20 @@ class baseClassBenchmark():
                 do_constant_folding=True,
                 verification=True
             )
+        else:
+            logger.info("Load existing onnx file")
 
 
     def create_engine(self):
         self.engine_file_path = self.onnx_file_path.replace('.onnx', '.trt')
-        engine = get_engine(
+        self.engine = get_engine(
             onnx_file_path=self.onnx_file_path,
             precision=self.precision,
             strict_precision=self.strict_precision,
             engine_file_path=self.engine_file_path
         )
     
-        self.context = engine.create_execution_context()
+        self.context = self.engine.create_execution_context()
 
     def allocate_memory(self, batch):
         self.output = np.empty(self.num_class, dtype=self.target_dtype) # Need to set both input and output precisions to FP16 to fully enable FP16

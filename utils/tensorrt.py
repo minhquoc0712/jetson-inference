@@ -234,6 +234,8 @@ def get_engine(
             if strict_precision:
                 config.set_flag(trt.BuilderFlag.STRICT_TYPES)
 
+            print(f"Build tensorrt model with {precision}.")
+
             # Parse model file
             if not os.path.exists(onnx_file_path):
                 print(
