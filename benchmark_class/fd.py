@@ -17,11 +17,12 @@ from benchmark import benchmark
 import torch
 import onnxruntime as ort
 import tempfile
+from functools import partial
 
 
 logger = getLogger(__name__)
 
-class LightweightOpenPoseBenchmark(baseClassBenchmark):
+class FallDetectorBenchmark(baseClassBenchmark):
     def __init__(
         self,
         model: Learner,
@@ -40,7 +41,7 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
         *args,
         **kwargs
     ):
-        super(LightweightOpenPoseBenchmark, self).__init__(
+        super(FallDetectorBenchmark, self).__init__(
             model=model,
             name=name,
             example_input_shape=example_input_shape,
@@ -56,58 +57,64 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
             num_class=num_class
         )
 
-        if self.learner.half:
+        if self.learner.pose_estimator.half:
             self.precision = 'FP16'
 
-        self.onnx_file_path = os.getcwd() + f'/{self.learner.backbone}.onnx'
+        self.onnx_file_path = os.getcwd() + f'/{self.learner.pose_estimator.backbone}.onnx'
         self.engine_file_path = self.onnx_file_path.replace('.onnx', 'trt')
+
+        if self.learner.pose_estimator.num_refinement_stages == 2:
+            self.target_np_type = 'float32'
+            self.target_torch_type = torch.float32
+        else:
+            self.target_np_type = 'float16'
+            self.target_torch_type = torch.float16
+
 
     def download_weights(self):
         logger.info(
-            f'Download pretrained model to {self.pytorch_model_dir}'
+            f'Download pretrained model of the pose estimator to {self.pytorch_model_dir}'
         )
-        self.learner.download(path=self.pytorch_model_dir, mode='pretrained', verbose=True)
+        self.learner.pose_estimator.download(path=self.pytorch_model_dir, mode='pretrained', verbose=True)
 
 
     def load_weights(self):
         logger.info(
-            f'Load pretrained model from {self.pytorch_model_dir}/openpose_default'
+            f'Load pretrained model of the pose estimator from {self.pytorch_model_dir}/openpose_default'
         )
-        self.learner.load(self.pytorch_model_dir + "/openpose_default")
-
+        self.learner.pose_estimator.load(self.pytorch_model_dir + "/openpose_default")
 
     def optimize(self):
+        if self.learner.pose_estimator.num_refinement_stages == 2:
+            output_names = ['stage_0_output_1_heatmaps', 'stage_0_output_0_pafs',
+                            'stage_1_output_1_heatmaps', 'stage_1_output_0_pafs']
+            atol = 1e-3
+        else:
+            output_names = ['stage_0_output_1_heatmaps', 'stage_0_output_0_pafs']
+            atol = 1e-2        
+
+        logger.info(f'onnx models output names: {output_names}')
+
         if not os.path.exists(self.onnx_file_path):
+            
             # turn pytorch model into eval mode
-            self.learner.model.eval()
-
-            if self.learner.num_refinement_stages == 2:
-                output_names = ['stage_0_output_1_heatmaps', 'stage_0_output_0_pafs',
-                                'stage_1_output_1_heatmaps', 'stage_1_output_0_pafs']
-                target_np_type = 'float32'
-                target_torch_type = torch.float32
-                atol = 1e-3
-            else:
-                output_names = ['stage_0_output_1_heatmaps', 'stage_0_output_0_pafs']
-                target_np_type = 'float16'
-                target_torch_type = torch.float16
-                atol = 1e-2
-
-            logger.info(f'onnx models output names: {output_names}')
+            self.learner.pose_estimator.model.eval()
 
             # conversion
+            export_shape = [1, 3, 256, 344]
             if self.enable_optimization:
                 # create tmp file
                 tmp_path = os.path.join(tempfile.gettempdir(), '{}.onnx'.format(time.time()))
                 torch.onnx.export(
-                    self.learner.model,
-                    torch.randn(*self.benchmark_input_shape, dtype=target_torch_type).to(self.learner.device),
+                    self.learner.pose_estimator.model,
+                    torch.randn(*export_shape, dtype=self.target_torch_type).to(self.learner.pose_estimator.device),
                     tmp_path,
                     do_constant_folding=True,
                     export_params=True, # if set to False exports untrained model
                     input_names=['input'],
                     output_names=output_names,
                     opset_version=11,
+                    dynamic_axes={"input": {3: "width"}}
                 )
 
                 sess_options = ort.SessionOptions()
@@ -118,28 +125,32 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
                 session = ort.InferenceSession(tmp_path, sess_options=sess_options, providers=[self.provider])
                 input_name = session.get_inputs()[0].name
                 for i in range(100):
-                    inputs = np.random.rand(*self.benchmark_input_shape).astype(target_np_type)
+                    inputs = np.random.rand(*export_shape).astype(self.target_np_type)
                     session.run([], {input_name: inputs})
 
                 assert os.path.exists(self.onnx_file_path)
             else:
+                example_infer_input = torch.randn(*self.benchmark_input_shape)
+                example_model_input = self.learner.preprocess(example_infer_input)[0]
+                export_shape = list(example_model_input.shape)
+                print(export_shape)
                 torch.onnx.export(
-                    self.learner.model,
-                    torch.randn(*self.benchmark_input_shape, dtype=target_torch_type).to(self.learner.device),
+                    self.learner.pose_estimator.model,
+                    torch.randn(*export_shape, dtype=self.target_torch_type).to(self.learner.pose_estimator.device),
                     self.onnx_file_path,
                     do_constant_folding=True,
                     export_params=True,
                     input_names=['input'],
                     output_names=output_names,
-                    opset_version=11
+                    opset_version=11,
                 )
 
             # verification
             onnx_model = OnnxModel(self.onnx_file_path, provider=self.provider)
             for i in range(10):
-                x = torch.randn(*self.benchmark_input_shape, dtype=target_torch_type)
+                x = torch.randn(*export_shape, dtype=self.target_torch_type)
                 with torch.no_grad():
-                    out_torch = self.learner.model(x.to(self.learner.device))
+                    out_torch = self.learner.pose_estimator.model(x.to(self.learner.device))
 
                 out_onnx = onnx_model(x.numpy())
 
@@ -157,13 +168,16 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
         else:
             logger.info("Load existing onnx file")
 
-    def pytorch_benchmark(self):
-        def get_device_fn(*args):
-            return next(self.learner.model.parameters()).device
-        
-        model_infer = self.learner.model
-        
-        self.call_benchmark_module(model_infer, get_device_fn)
+
+    def create_engine(self):
+        self.engine = get_engine(
+            onnx_file_path=self.onnx_file_path,
+            precision=self.precision,
+            strict_precision=self.strict_precision,
+            engine_file_path=self.engine_file_path
+        )
+    
+        self.context = self.engine.create_execution_context()
 
 
     def allocate_memory(self, batch):
@@ -197,8 +211,11 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
         if self.stream is None:
             self.allocate_memory(batch)
         
+        tensor_img, scale, pad = self.learner.preprocess(batch)
+        tensor_img = np.ascontiguousarray(tensor_img.cpu().numpy(), dtype=self.target_np_type)
+
         # Transfer input data to the GPU.
-        cuda.memcpy_htod_async(self.d_input.device, batch, self.stream)
+        cuda.memcpy_htod_async(self.d_input.device, tensor_img, self.stream)
         
         # Run inference.
         self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)
@@ -213,20 +230,41 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
         return [out.host for out in self.d_output]
 
 
+    def pytorch_benchmark(self):
+        def get_device_fn(*args):
+            return next(self.learner.pose_estimator.model.parameters()).device
+        
+        model_infer = partial(self.learner.infer, mode='torch')
+        
+        self.call_benchmark_module(model_infer, get_device_fn)
+
+    def onnx_benchmark(self):
+        self.learner.onnx_model = OnnxModel(
+            engine_file=self.onnx_file_path,
+            provider=self.provider
+        )
+        assert hasattr(self.learner, 'onnx_model')
+
+        model_infer = partial(self.learner.infer, mode='onnx')
+        get_device_fn = lambda x : None
+
+        self.call_benchmark_module(model_infer, get_device_fn)
+
+    def tensorrt_benchmark(self):
+        model_infer = self.tensorrt_infer
+        get_device_fn = lambda x : None
+
+        self.call_benchmark_module(model_infer, get_device_fn)
+
     def call_benchmark_module(self, model_infer, get_device_fn):
         if self.mode == 'torch':
             def transfer_device_fn(sample, device):
-                if isinstance(sample, list):
-                    return [sample[i].to(device) for i in range(len(sample))]
-                elif isinstance(sample, torch.Tensor):
-                    return sample.to(device)
-                else:
-                    raise RuntimeError
+                return sample
         else:
             transfer_device_fn = lambda x : None
 
 
-        if self.learner.half:
+        if self.learner.pose_estimator.half:
             def generate_input_sample(input_shape: Union[list, tuple], mode) -> Union[torch.Tensor, np.array]:
                 if mode == 'torch':
                     return torch.randn(*input_shape, dtype=torch.float16).to('cpu')
@@ -251,7 +289,6 @@ class LightweightOpenPoseBenchmark(baseClassBenchmark):
             get_device_fn=get_device_fn
         )
 
-
 # Simple helper data class that's a little nicer to use than a 2-tuple.
 class HostDeviceMem(object):
     def __init__(self, host_mem, device_mem):
@@ -263,3 +300,4 @@ class HostDeviceMem(object):
 
     def __repr__(self):
         return self.__str__()
+

@@ -6,16 +6,16 @@ batch_size: 1
 warmup_iter: 10
 benchmark_iter: 100
 
-mode: ???
+mode: torch
 provider: 'CUDAExecutionProvider'
 
 pytorch_model_dir: '/media/ubuntu/sdcard/opendr_eu/jetson-inference/torch_models'
 
 hydra:
   run:
-    dir: ./outputs/${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${benchmark_class.model.backbone}/${mode}
+    dir: ./outputs/${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${benchmark_class.model.pose_estimator.backbone}/${mode}
   sweep:
     dir: ./outputs
-    subdir: ${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${benchmark_class.model.backbone}/${mode}
+    subdir: ${hydra:runtime.choices.benchmark_class}/${hydra:runtime.choices.benchmark_class/model}/${benchmark_class.model.pose_estimator.backbone}/${mode}
   job:
     chdir: True
